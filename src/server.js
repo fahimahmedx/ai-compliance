@@ -65,7 +65,7 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
             worldAttemptId: request.attemptId,
             eligibilityStatus: "pending",
             reasonCode: "verification_pending",
-            reason: "Scan the World App QR code to verify your World ID.",
+            reason: "Scan the World App QR code to verify your US-issued passport.",
           });
         }
         return sendJson(res, 200, request);
@@ -76,7 +76,7 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
         if (!user) {
           return sendJson(res, 200, {
             status: "pending",
-            reason: "Scan the World App QR code to verify your World ID.",
+            reason: "Scan the World App QR code to verify your US-issued passport.",
           });
         }
         const verification = store.getVerification(user.id);
@@ -149,7 +149,7 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
             promptLength: 0,
             reasonCode: verification?.reasonCode || getWorldEligibilityStatus(verification).status,
           });
-          return sendError(res, 403, "Scan World App to verify your World ID before prompting the LLM.");
+          return sendError(res, 403, "Scan World App to verify your US-issued passport before prompting the LLM.");
         }
 
         const { prompt } = await readJson(req);

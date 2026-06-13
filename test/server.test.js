@@ -101,6 +101,34 @@ test("user-facing API responses do not expose credit or cost details", async () 
   }
 });
 
+test("old World ID proof-only sessions cannot prompt the LLM", async () => {
+  const app = await startTestServer();
+  try {
+    const user = app.store.getOrCreateUserByWorldNullifier("old_nullifier");
+    app.store.saveVerification(user.id, {
+      provider: "world",
+      eligibilityStatus: "eligible",
+      reasonCode: "world_id_verified",
+      reason: "World App verified a World ID.",
+      verifiedAt: new Date().toISOString(),
+      eligibilityExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const cookie = `sid=${app.store.createSession(user.id)}`;
+
+    const blocked = await api(app, "/api/llm/messages", {
+      method: "POST",
+      cookie,
+      body: { prompt: "should be blocked" },
+      expectOk: false,
+    });
+
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.body.error, "Scan World App to verify your US-issued passport before prompting the LLM.");
+  } finally {
+    await app.close();
+  }
+});
+
 async function startTestServer() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-compliance-server-"));
   const config = {
@@ -119,6 +147,7 @@ async function startTestServer() {
   config.baseUrl = `http://127.0.0.1:${port}`;
   return {
     baseUrl: config.baseUrl,
+    store,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
 }

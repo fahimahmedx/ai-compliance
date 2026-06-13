@@ -1,4 +1,4 @@
-import { IDKit, proofOfHuman } from "https://esm.sh/@worldcoin/idkit-core@4.1.8";
+import { IDKit, identityCheck } from "https://esm.sh/@worldcoin/idkit-core@4.1.8";
 
 const statusPill = document.querySelector("#status-pill");
 const statusCopy = document.querySelector("#status-copy");
@@ -41,7 +41,7 @@ function setStatus(status, reason) {
   const labels = {
     signed_out: "Signed out",
     pending: "Pending",
-    eligible: "Verified US Citizen 🇺🇸",
+    eligible: "US passport verified",
     ineligible: "Ineligible",
     expired: "Expired",
     failed: "Failed",
@@ -54,7 +54,7 @@ function setStatus(status, reason) {
   statusPill.textContent = labels[status] || status;
   statusCopy.textContent = currentUser
     ? reason || statusMessage(status)
-    : "Verify with World to access Claude.";
+    : "Verify your US-issued passport with World to access Claude.";
 
   startVerification.disabled = false;
   promptInput.disabled = status !== "eligible" || conversationClosed;
@@ -66,12 +66,12 @@ function setStatus(status, reason) {
 }
 
 function statusMessage(status) {
-  if (status === "eligible") return "World App verified your World ID. Prompt access is enabled.";
-  if (status === "pending") return "Scan the QR code with World App to verify your World ID.";
-  if (status === "ineligible") return "World verification did not prove a World ID.";
-  if (status === "expired") return "World verification expired. Scan again to continue chatting.";
+  if (status === "eligible") return "World App verified your US-issued passport. Prompt access is enabled.";
+  if (status === "pending") return "Scan the QR code with World App to verify your US-issued passport.";
+  if (status === "ineligible") return "World verification did not prove a US-issued passport.";
+  if (status === "expired") return "US passport verification expired. Scan again to continue chatting.";
   if (status === "failed") return "World verification failed. Start a new scan and try again.";
-  return "Start World App verification to unlock prompts.";
+  return "Start US passport verification to unlock prompts.";
 }
 
 async function refresh() {
@@ -105,7 +105,7 @@ startVerification.addEventListener("click", async () => {
     connectorLink.href = mockConnectorUri;
     qrCard.hidden = false;
     startVerification.textContent = "Refreshing...";
-    addMessage("assistant", "Mock World mode: showing a temporary QR code.");
+    addMessage("assistant", "Mock World mode: showing a temporary US passport QR code.");
     mockCompleteTimer = setTimeout(() => {
       completeMockVerification().catch((error) => showSystemMessage(error.message));
     }, 1000);
@@ -131,7 +131,7 @@ startVerification.addEventListener("click", async () => {
 
 async function completeMockVerification() {
   if (!currentAttemptId) {
-    addMessage("assistant", "Start a World QR request first.");
+    addMessage("assistant", "Start a World passport QR request first.");
     return;
   }
   await api("/api/world/verify", {
@@ -333,7 +333,7 @@ function clearConversation() {
 
 function resetConversation() {
   clearConversation();
-  addMessage("assistant", "World ID verified. Ask the agent anything.");
+  addMessage("assistant", "US passport verified. Ask the agent anything.");
 }
 
 async function loadConversation() {
@@ -400,7 +400,10 @@ async function createWorldConnectorUri(request, signal) {
     allow_legacy_proofs: request.allowLegacyProofs,
     require_user_presence: request.requireUserPresence,
     environment: request.environment,
-  }).preset(proofOfHuman({ signal: request.signal }));
+  }).preset(identityCheck({
+    attributes: request.identityAttributes,
+    legacy_signal: request.signal,
+  }));
 
   statusCopy.textContent = "Waiting for World App scan...";
   startBridgePolling(idkitRequest, request, signal);

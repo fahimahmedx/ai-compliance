@@ -1,6 +1,6 @@
 # World ID Agent
 
-World ID-gated Claude prompt gateway. Users verify with World, then chat with the agent. Each unique World ID nullifier gets its own private server-side conversation, and the conversation closes automatically after five user messages.
+World ID-gated Claude prompt gateway. Users verify a US-issued passport with World, then chat with the agent. Each unique World ID nullifier gets its own private server-side conversation, and the conversation closes automatically after five user messages.
 
 ## Run locally
 
@@ -10,7 +10,7 @@ npm start
 
 Open `http://localhost:3000`.
 
-The app runs in mock mode by default. Starting verification simulates a successful World ID result after a short delay.
+The app runs in mock mode by default. Starting verification simulates a successful US-issued passport result after a short delay.
 
 ## Real integrations
 
@@ -27,7 +27,7 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 DATA_FILE=data/app.sqlite
 ```
 
-Production use requires a World app with World ID 4.0 enabled. This version uses the basic proof-of-human flow and does not verify passport, nationality, or country attributes.
+Production use requires a World app with World ID 4.0 identity checks enabled. This version requires a passport credential with `document_type=passport` and `issuing_country=US`; legacy World ID proofs are not accepted because they cannot prove the passport country attribute.
 
 The server stores SQLite state in `data/app.sqlite` by default. It stores users keyed by World nullifier, hashed sessions, derived eligibility metadata, and per-user chat messages. It does not store names, document data, or raw proofs.
 
@@ -62,7 +62,7 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 
 Use Railway sealed variables for `WORLD_RP_SIGNING_KEY` and `ANTHROPIC_API_KEY`.
 
-In the World Developer Portal, enable World ID 4.0 for the app and configure the live app URL with the Railway domain. The app creates a unique World action for each verification attempt to avoid World replay failures, while storing users by the returned RP-scoped nullifier.
+In the World Developer Portal, enable World ID 4.0 identity checks for the app and configure the live app URL with the Railway domain. The app creates a unique World action for each verification attempt to avoid World replay failures, while storing users by the returned RP-scoped nullifier.
 
 After deploy, open `/api/config/status` on the Railway URL to confirm World and Anthropic are configured, then complete a real World App scan and send a test prompt.
 

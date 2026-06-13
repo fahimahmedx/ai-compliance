@@ -189,7 +189,7 @@ export class SqliteStore {
       merged.worldAttemptId || null,
       merged.eligibilityStatus || "pending",
       merged.reasonCode || "verification_pending",
-      merged.reason || "Scan the World App QR code to verify your World ID.",
+      merged.reason || "Scan the World App QR code to verify your US-issued passport.",
       merged.worldNullifierHash || null,
       merged.verifiedAt || null,
       merged.eligibilityExpiresAt || null,

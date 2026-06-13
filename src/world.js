@@ -3,7 +3,12 @@ import { signRequest } from "@worldcoin/idkit-core/signing";
 import { hashSignal } from "@worldcoin/idkit-core/hashing";
 
 export const WORLD_ACTION = "world-id-chat-access-v1";
+export const US_PASSPORT_REASON_CODE = "us_passport_verified";
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
+const US_PASSPORT_ATTRIBUTES = Object.freeze([
+  { type: "document_type", value: "passport" },
+  { type: "issuing_country", value: "US" },
+]);
 
 export function createWorldVerificationRequest({ config, store, user }) {
   const attemptId = crypto.randomUUID();
@@ -36,8 +41,9 @@ export function createWorldVerificationRequest({ config, store, user }) {
     action: attempt.action,
     flow: "action",
     signal: attempt.signal,
+    identityAttributes: US_PASSPORT_ATTRIBUTES,
     environment: config.worldEnvironment,
-    allowLegacyProofs: true,
+    allowLegacyProofs: false,
     requireUserPresence: false,
     rpContext: {
       rp_id: config.worldRpId || "rp_staging_dev_mock",
@@ -46,7 +52,7 @@ export function createWorldVerificationRequest({ config, store, user }) {
       expires_at: rpSignature.expiresAt,
       signature: rpSignature.sig,
     },
-    credentialPreset: "proofOfHuman",
+    credentialPreset: "identityCheck",
     mock: !hasWorldConfig(config),
   };
 }
@@ -80,8 +86,8 @@ export async function verifyWorldProof({ config, store, user, payload }) {
   if (!result.success) {
     return deny("world_verify_failed", result.detail || "World verification failed.");
   }
-  if (!result.has_world_id) {
-    return deny("world_id_not_proven", "World proof did not include a World ID credential.");
+  if (!result.has_us_passport) {
+    return deny("us_passport_not_proven", "World verification did not prove a US-issued passport.");
   }
 
   const nullifierHash = result.nullifier_hash || payload.nullifier_hash;
@@ -96,8 +102,8 @@ export async function verifyWorldProof({ config, store, user, payload }) {
     action: attempt.action,
     worldAttemptId: attempt.id,
     eligibilityStatus: "eligible",
-    reasonCode: "world_id_verified",
-    reason: "World App verified a World ID.",
+    reasonCode: US_PASSPORT_REASON_CODE,
+    reason: "World App verified a US-issued passport.",
     worldNullifierHash: nullifierHash,
     verifiedAt: new Date().toISOString(),
     eligibilityExpiresAt: expiresAt,
@@ -110,20 +116,29 @@ export function getWorldEligibilityStatus(verification) {
   if (!verification) {
     return {
       status: "pending",
-      reason: "Scan the World App QR code to verify your World ID.",
+      reason: "Scan the World App QR code to verify your US-issued passport.",
+    };
+  }
+  if (verification.eligibilityStatus === "eligible" && verification.reasonCode !== US_PASSPORT_REASON_CODE) {
+    return {
+      status: "ineligible",
+      reason: "Verify a US-issued passport with World App to continue.",
+      provider: verification.provider || null,
+      verifiedAt: verification.verifiedAt || null,
+      eligibilityExpiresAt: verification.eligibilityExpiresAt || null,
     };
   }
   if (verification.eligibilityStatus === "eligible" && verification.eligibilityExpiresAt) {
     if (new Date(verification.eligibilityExpiresAt) <= new Date()) {
       return {
         status: "expired",
-        reason: "World verification expired. Scan again to continue chatting.",
+        reason: "US passport verification expired. Scan again to continue chatting.",
       };
     }
   }
   return {
     status: verification.eligibilityStatus || "pending",
-    reason: verification.reason || "Scan the World App QR code to verify your World ID.",
+    reason: verification.reason || "Scan the World App QR code to verify your US-issued passport.",
     provider: verification.provider || null,
     verifiedAt: verification.verifiedAt || null,
     eligibilityExpiresAt: verification.eligibilityExpiresAt || null,
@@ -152,7 +167,7 @@ async function callWorldVerifyApi(config, attempt, payload) {
     if (isNullifierReplay(body) && getPayloadNullifier(payload)) {
       return {
         success: true,
-        has_world_id: hasWorldIdCredential(payload),
+        has_us_passport: hasUsPassportCredential(payload),
         nullifier_hash: getPayloadNullifier(payload),
         detail: body.detail || body.error,
         replayed: true,
@@ -169,7 +184,7 @@ async function callWorldVerifyApi(config, attempt, payload) {
 function normalizeWorldVerifyResponse(body, payload) {
   return {
     success: body.success === true,
-    has_world_id: hasWorldIdCredential(payload),
+    has_us_passport: hasUsPassportCredential(payload),
     nullifier_hash: body.nullifier_hash || getPayloadNullifier(payload),
     detail: body.detail || body.error,
   };
@@ -178,7 +193,7 @@ function normalizeWorldVerifyResponse(body, payload) {
 function normalizeWorldSessionResponse(payload) {
   return {
     success: Boolean(payload.session_id),
-    has_world_id: hasWorldIdCredential(payload),
+    has_us_passport: hasUsPassportCredential(payload),
     nullifier_hash: getSessionNullifier(payload),
     detail: payload.error,
   };
@@ -187,14 +202,15 @@ function normalizeWorldSessionResponse(payload) {
 function mockWorldVerifyResponse(attempt) {
   return {
     success: true,
-    has_world_id: true,
+    has_us_passport: true,
     nullifier_hash: `mock_nullifier_${attempt.id}`,
   };
 }
 
-function hasWorldIdCredential(payload) {
+function hasUsPassportCredential(payload) {
+  if (payload.protocol_version !== "4.0" || payload.identity_attested !== true) return false;
   const identifiers = new Set((payload.responses || []).map((response) => response.identifier));
-  return identifiers.has("proof_of_human") || identifiers.has("orb") || identifiers.has("device");
+  return identifiers.has("passport");
 }
 
 function getPayloadNullifier(payload) {
@@ -212,8 +228,12 @@ function isNullifierReplay(body) {
 }
 
 function hasExpectedSignalHash(payload, signal) {
+  const signalHashes = (payload.responses || [])
+    .map((response) => response.signal_hash)
+    .filter(Boolean);
+  if (!signalHashes.length && payload.identity_attested === true) return true;
   const expected = hashSignal(signal).toLowerCase();
-  return (payload.responses || []).some((response) => response.signal_hash?.toLowerCase() === expected);
+  return signalHashes.some((signalHash) => signalHash.toLowerCase() === expected);
 }
 
 function toWorldVerifyPayload(payload) {
