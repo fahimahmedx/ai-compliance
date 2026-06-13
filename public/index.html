@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World ID Agent</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>World Agent</span>
+        </div>
+        <span id="status-pill" class="pill">Verify</span>
+      </header>
+
+      <section id="verify-view" class="stage verify-stage">
+        <div class="hero-copy">
+          <p class="eyebrow">Proof of human</p>
+          <h1>Chat as a verified human.</h1>
+          <p id="status-copy" class="lede">Scan with World App to unlock the agent.</p>
+        </div>
+
+        <div class="verify-panel">
+          <div class="step-row">
+            <span class="step-number">1</span>
+            <span>Verify with World</span>
+          </div>
+          <div id="qr-card" class="qr-card" hidden>
+            <div id="qr-code" class="qr-code"></div>
+            <a id="connector-link" href="#" target="_blank" rel="noreferrer">Open on this device</a>
+          </div>
+          <div class="actions">
+            <button id="start-verification">Verify with World</button>
+            <button id="mock-verify" class="secondary" disabled>Mock verify</button>
+          </div>
+          <form id="login-form" class="hidden-form">
+            <input id="email" type="email" autocomplete="email" value="human@world.local" aria-label="Email" required />
+            <button type="submit" tabindex="-1">Sign in</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="chat-view" class="stage chat-stage" hidden>
+        <div class="chat-head">
+          <div>
+            <p class="eyebrow">Step 2</p>
+            <h1>Start chatting.</h1>
+          </div>
+          <span id="model-pill" class="pill ok">Claude gateway</span>
+        </div>
+        <div class="chat-surface">
+          <pre id="response" class="response" aria-live="polite">World ID verified. Ask the agent anything.</pre>
+          <div class="composer">
+            <textarea id="prompt" rows="2" placeholder="Message the agent..." disabled></textarea>
+            <button id="send-prompt" disabled>Send</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
