@@ -19,6 +19,7 @@ let currentStatus = "signed_out";
 let currentAttemptId = null;
 let pollTimer = null;
 let idkitAbortController = null;
+let mockCompleteTimer = null;
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -111,7 +112,21 @@ startVerification.addEventListener("click", async () => {
   currentAttemptId = request.attemptId;
 
   if (request.mock) {
-    await completeMockVerification();
+    if (mockCompleteTimer) clearTimeout(mockCompleteTimer);
+    await refresh();
+    const mockConnectorUri = `https://world.org/verify/mock?attempt=${encodeURIComponent(request.attemptId)}`;
+    const qr = await api("/api/qr", {
+      method: "POST",
+      body: JSON.stringify({ text: mockConnectorUri }),
+    });
+    qrCode.innerHTML = qr.svg;
+    connectorLink.href = mockConnectorUri;
+    qrCard.hidden = false;
+    startVerification.textContent = "Refreshing...";
+    addMessage("assistant", "Mock World mode: showing a temporary QR code.");
+    mockCompleteTimer = setTimeout(() => {
+      completeMockVerification().catch((error) => showSystemMessage(error.message));
+    }, 1000);
     return;
   }
 
@@ -149,6 +164,10 @@ async function completeMockVerification() {
   resetConversation();
   startVerification.textContent = "Verify with World";
   startVerification.disabled = false;
+  if (mockCompleteTimer) {
+    clearTimeout(mockCompleteTimer);
+    mockCompleteTimer = null;
+  }
 }
 
 sendPrompt.addEventListener("click", async () => {
