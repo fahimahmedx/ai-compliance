@@ -1,5 +1,3 @@
-import { IDKit, identityCheck } from "https://esm.sh/@worldcoin/idkit-core@4.1.8";
-
 const statusPill = document.querySelector("#status-pill");
 const statusCopy = document.querySelector("#status-copy");
 const startVerification = document.querySelector("#start-verification");
@@ -56,7 +54,8 @@ function setStatus(status, reason) {
     ? reason || statusMessage(status)
     : "Verify your US-issued passport with World to access Claude.";
 
-  startVerification.disabled = false;
+  startVerification.textContent = "Coming Soon";
+  startVerification.disabled = true;
   promptInput.disabled = status !== "eligible" || conversationClosed;
   sendPrompt.disabled = status !== "eligible" || conversationClosed;
 
@@ -86,7 +85,7 @@ async function refresh() {
   }
 }
 
-startVerification.addEventListener("click", async () => {
+async function startWorldVerification() {
   startVerification.disabled = true;
   startVerification.textContent = "Preparing...";
   clearBridgePoll();
@@ -127,7 +126,7 @@ startVerification.addEventListener("click", async () => {
   startVerification.textContent = "Refresh QR";
   startVerification.disabled = false;
   statusCopy.textContent = "QR ready. Scan with World App, then approve the request on your phone.";
-});
+}
 
 async function completeMockVerification() {
   if (!currentAttemptId) {
