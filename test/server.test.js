@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createServer } from "../src/server.js";
-import { SqliteStore, INITIAL_CREDIT_MICROS } from "../src/store.js";
+import { SqliteStore } from "../src/store.js";
 
 test("verified users only receive their own persisted conversation", async () => {
   const app = await startTestServer();
@@ -41,15 +41,64 @@ test("verified users only receive their own persisted conversation", async () =>
   }
 });
 
-test("new World nullifier receives one ten cent credit grant", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-compliance-store-"));
-  const store = new SqliteStore(path.join(tempDir, "app.sqlite"));
+test("verified users can send five messages before the conversation closes", async () => {
+  const app = await startTestServer();
+  try {
+    const user = await verifyMockUser(app);
 
-  const first = store.getOrCreateUserByWorldNullifier("nullifier_one");
-  const second = store.getOrCreateUserByWorldNullifier("nullifier_one");
+    for (let index = 1; index <= 5; index += 1) {
+      const result = await api(app, "/api/llm/messages", {
+        method: "POST",
+        cookie: user.cookie,
+        body: { prompt: `prompt ${index}` },
+      });
+      assert.equal(result.conversation.closed, index === 5);
+      assert.equal(result.conversation.userMessageCount, index);
+    }
 
-  assert.equal(first.id, second.id);
-  assert.equal(store.getCreditBalance(first.id), INITIAL_CREDIT_MICROS);
+    const conversation = await api(app, "/api/conversation", { cookie: user.cookie });
+    assert.equal(conversation.conversation.closed, true);
+    assert.equal(conversation.conversation.userMessageCount, 5);
+
+    const blocked = await api(app, "/api/llm/messages", {
+      method: "POST",
+      cookie: user.cookie,
+      body: { prompt: "prompt 6" },
+      expectOk: false,
+    });
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.body.error, "This conversation is closed.");
+  } finally {
+    await app.close();
+  }
+});
+
+test("user-facing API responses do not expose credit or cost details", async () => {
+  const app = await startTestServer();
+  try {
+    const user = await verifyMockUser(app);
+
+    const me = await api(app, "/api/me", { cookie: user.cookie });
+    const message = await api(app, "/api/llm/messages", {
+      method: "POST",
+      cookie: user.cookie,
+      body: { prompt: "hello" },
+    });
+    const conversation = await api(app, "/api/conversation", { cookie: user.cookie });
+
+    assert.equal("credits" in user.body, false);
+    assert.equal("credits" in me, false);
+    assert.equal("credits" in conversation, false);
+    assert.equal("credits" in message, false);
+    assert.equal("usage" in message, false);
+    assert.equal("costMicros" in message, false);
+    assert.equal("costMicros" in message.message, false);
+    assert.equal("inputTokens" in conversation.messages[0], false);
+    assert.equal("outputTokens" in conversation.messages[0], false);
+    assert.equal("costMicros" in conversation.messages[0], false);
+  } finally {
+    await app.close();
+  }
 });
 
 async function startTestServer() {
@@ -101,6 +150,7 @@ async function api(app, pathname, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const body = await response.json().catch(() => ({}));
+  if (options.expectOk === false) return { status: response.status, body, headers: response.headers };
   if (!response.ok) {
     throw new Error(body.error || `Request failed with ${response.status}`);
   }

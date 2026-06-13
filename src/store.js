@@ -3,8 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-export const INITIAL_CREDIT_MICROS = 100_000;
-
 export class SqliteStore {
   constructor(filePath) {
     this.filePath = filePath;
@@ -130,9 +128,6 @@ export class SqliteStore {
       this.db.prepare(
         "INSERT INTO users (id, world_nullifier_hash, created_at) VALUES (?, ?, ?)",
       ).run(user.id, user.worldNullifierHash, user.createdAt);
-      this.db.prepare(
-        "INSERT INTO credit_ledger (id, user_id, amount_micros, kind, status, created_at, updated_at) VALUES (?, ?, ?, 'grant', 'posted', ?, ?)",
-      ).run(crypto.randomUUID(), user.id, INITIAL_CREDIT_MICROS, now, now);
       this.ensureConversation(user.id);
     });
     return user;
@@ -326,6 +321,16 @@ export class SqliteStore {
       ORDER BY created_at ASC
     `).all(conversation.id, userId);
     return rows.map(toMessage);
+  }
+
+  getUserMessageCount(userId) {
+    const conversation = this.ensureConversation(userId);
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM messages
+      WHERE conversation_id = ? AND user_id = ? AND role = 'user'
+    `).get(conversation.id, userId);
+    return Number(row?.count || 0);
   }
 
   addMessage(userId, message) {

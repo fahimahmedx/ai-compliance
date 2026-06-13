@@ -11,10 +11,12 @@ const chatView = document.querySelector("#chat-view");
 const promptInput = document.querySelector("#prompt");
 const sendPrompt = document.querySelector("#send-prompt");
 const response = document.querySelector("#response");
-const creditBalance = document.querySelector("#credit-balance");
+const demoPopup = document.querySelector("#demo-popup");
+const demoPopupClose = document.querySelector("#demo-popup-close");
 
 let currentUser = null;
 let currentStatus = "signed_out";
+let conversationClosed = false;
 let currentAttemptId = null;
 let pollTimer = null;
 let bridgePollTimer = null;
@@ -55,8 +57,8 @@ function setStatus(status, reason) {
     : "Verify with World to access Claude.";
 
   startVerification.disabled = false;
-  promptInput.disabled = status !== "eligible";
-  sendPrompt.disabled = status !== "eligible";
+  promptInput.disabled = status !== "eligible" || conversationClosed;
+  sendPrompt.disabled = status !== "eligible" || conversationClosed;
 
   const isEligible = status === "eligible";
   verifyView.hidden = isEligible;
@@ -76,11 +78,10 @@ async function refresh() {
   const me = await api("/api/me");
   currentUser = me.user;
   if (currentUser) {
-    setCredits(me.credits);
     setStatus(me.identity.status, me.identity.reason);
     if (me.identity.status === "eligible") await loadConversation();
   } else {
-    setCredits(me.credits);
+    conversationClosed = false;
     setStatus("signed_out");
   }
 }
@@ -155,6 +156,14 @@ sendPrompt.addEventListener("click", async () => {
   await sendChatMessage();
 });
 
+demoPopupClose.addEventListener("click", () => {
+  hideDemoPopup();
+});
+
+demoPopup.addEventListener("click", (event) => {
+  if (event.target === demoPopup) hideDemoPopup();
+});
+
 promptInput.addEventListener("keydown", async (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -176,14 +185,20 @@ async function sendChatMessage() {
       method: "POST",
       body: JSON.stringify({ prompt }),
     });
-    setCredits(result.credits);
     updateMessage(pending, result.text);
+    applyConversationState(result.conversation);
   } catch (error) {
-    updateMessage(pending, error.message, true);
+    if (error.message === "This conversation is closed.") {
+      pending.remove();
+      response.scrollTop = response.scrollHeight;
+      applyConversationState({ closed: true });
+    } else {
+      updateMessage(pending, error.message, true);
+    }
   } finally {
-    sendPrompt.disabled = currentStatus !== "eligible";
-    promptInput.disabled = currentStatus !== "eligible";
-    promptInput.focus();
+    sendPrompt.disabled = currentStatus !== "eligible" || conversationClosed;
+    promptInput.disabled = currentStatus !== "eligible" || conversationClosed;
+    if (!conversationClosed) promptInput.focus();
   }
 }
 
@@ -323,7 +338,7 @@ function resetConversation() {
 
 async function loadConversation() {
   const conversation = await api("/api/conversation");
-  setCredits(conversation.credits);
+  applyConversationState(conversation.conversation, { silent: true });
   clearConversation();
   if (!conversation.messages.length) {
     resetConversation();
@@ -332,11 +347,26 @@ async function loadConversation() {
   for (const message of conversation.messages) {
     addMessage(message.role, message.content);
   }
+  if (conversationClosed) showDemoPopup();
 }
 
-function setCredits(credits = {}) {
-  const cents = Number(credits.displayCents || 0);
-  creditBalance.textContent = `${cents.toFixed(1)}¢ left`;
+function applyConversationState(conversation = {}, options = {}) {
+  const wasClosed = conversationClosed;
+  conversationClosed = Boolean(conversation.closed);
+  promptInput.disabled = currentStatus !== "eligible" || conversationClosed;
+  sendPrompt.disabled = currentStatus !== "eligible" || conversationClosed;
+  if (conversationClosed && !wasClosed && !options.silent) {
+    showDemoPopup();
+  }
+}
+
+function showDemoPopup() {
+  demoPopup.hidden = false;
+  demoPopupClose.focus();
+}
+
+function hideDemoPopup() {
+  demoPopup.hidden = true;
 }
 
 function showSystemMessage(text) {

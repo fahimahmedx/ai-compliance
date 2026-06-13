@@ -18,6 +18,7 @@ const publicDir = path.resolve(__dirname, "../public");
 const INPUT_MICROS_PER_TOKEN = 1;
 const OUTPUT_MICROS_PER_TOKEN = 5;
 const MAX_OUTPUT_TOKENS = 1024;
+const USER_MESSAGE_LIMIT = 5;
 
 export function createServer({ config = getConfig(), store = new SqliteStore(config.dataFile) } = {}) {
   return http.createServer(async (req, res) => {
@@ -30,7 +31,6 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
         return sendJson(res, 200, {
           user,
           identity: user ? getWorldEligibilityStatus(verification) : { status: "signed_out" },
-          credits: user ? formatCredits(store.getCreditBalance(user.id)) : formatCredits(0),
           model: config.anthropicModel,
         });
       }
@@ -104,7 +104,6 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
         return sendJson(res, 200, {
           user: result.user,
           verification: result.verification,
-          credits: formatCredits(store.getCreditBalance(result.user.id)),
         }, {
           "set-cookie": sessionCookie(token, config),
         });
@@ -127,8 +126,8 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
         const user = requireUser(req, res, store);
         if (!user) return;
         return sendJson(res, 200, {
-          messages: store.getConversationMessages(user.id),
-          credits: formatCredits(store.getCreditBalance(user.id)),
+          messages: store.getConversationMessages(user.id).map(toPublicMessage),
+          conversation: getConversationState(store, user.id),
         });
       }
 
@@ -155,42 +154,25 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
           return sendError(res, 413, "Prompt is too long for this MVP");
         }
 
+        const userMessageCount = store.getUserMessageCount(user.id);
+        if (userMessageCount >= USER_MESSAGE_LIMIT) {
+          store.addAuditEvent({
+            userId: user.id,
+            allowed: false,
+            promptLength: prompt.length,
+            reasonCode: "conversation_closed",
+          });
+          return sendError(res, 403, "This conversation is closed.");
+        }
+
         const history = store.getConversationMessages(user.id).map(({ role, content }) => ({ role, content }));
         const messages = [...history, { role: "user", content: prompt.trim() }];
-        let reservation = null;
         let maxTokens = MAX_OUTPUT_TOKENS;
 
-        if (config.anthropicApiKey) {
-          const estimatedInputCost = estimateInputTokens(messages) * INPUT_MICROS_PER_TOKEN;
-          const balance = store.getCreditBalance(user.id);
-          if (balance <= estimatedInputCost) {
-            store.addAuditEvent({
-              userId: user.id,
-              allowed: false,
-              promptLength: prompt.length,
-              reasonCode: "insufficient_credits",
-            });
-            return sendError(res, 402, "You have used your Claude credits.");
-          }
-          maxTokens = Math.min(MAX_OUTPUT_TOKENS, Math.floor((balance - estimatedInputCost) / OUTPUT_MICROS_PER_TOKEN));
-          if (maxTokens < 1) return sendError(res, 402, "You have used your Claude credits.");
-          const reservationCost = estimatedInputCost + maxTokens * OUTPUT_MICROS_PER_TOKEN;
-          reservation = store.createCreditReservation(user.id, reservationCost);
-          if (!reservation) return sendError(res, 402, "You have used your Claude credits.");
-        }
-
         let result;
-        try {
-          result = await sendClaudeMessage(config, messages, { maxTokens });
-        } catch (error) {
-          if (reservation) store.releaseCreditReservation(reservation.id);
-          throw error;
-        }
+        result = await sendClaudeMessage(config, messages, { maxTokens });
 
         const costMicros = result.mock ? 0 : calculateCostMicros(result.usage);
-        if (reservation) {
-          store.finalizeCreditReservation(reservation.id, costMicros, result.usage, result.id);
-        }
         store.addMessage(user.id, { role: "user", content: prompt.trim(), mock: result.mock });
         const assistantMessage = store.addMessage(user.id, {
           role: "assistant",
@@ -210,11 +192,9 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
         });
         return sendJson(res, 200, {
           text: result.text,
-          message: assistantMessage,
+          message: toPublicMessage(assistantMessage),
           mock: result.mock,
-          usage: result.usage,
-          costMicros,
-          credits: formatCredits(store.getCreditBalance(user.id)),
+          conversation: getConversationState(store, user.id),
         });
       }
 
@@ -246,17 +226,21 @@ function sessionCookie(token, config) {
   return `sid=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }
 
-function formatCredits(balanceMicros) {
+function getConversationState(store, userId) {
+  const userMessageCount = store.getUserMessageCount(userId);
   return {
-    balanceMicros,
-    balanceUsd: balanceMicros / 1_000_000,
-    displayCents: balanceMicros / 10_000,
+    closed: userMessageCount >= USER_MESSAGE_LIMIT,
+    userMessageCount,
   };
 }
 
-function estimateInputTokens(messages) {
-  const textLength = messages.reduce((total, message) => total + message.content.length, 0);
-  return Math.ceil(textLength / 3) + messages.length * 8 + 100;
+function toPublicMessage(message) {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.createdAt,
+  };
 }
 
 function calculateCostMicros(usage = {}) {

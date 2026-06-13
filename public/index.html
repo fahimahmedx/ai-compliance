@@ -44,7 +44,6 @@
             <p class="eyebrow">Step 2</p>
             <h1>Start chatting.</h1>
           </div>
-          <span id="credit-balance" class="credit-balance">0.0¢ left</span>
         </div>
         <div class="chat-surface">
           <div id="response" class="conversation" aria-live="polite">
@@ -60,6 +59,17 @@
         </div>
       </section>
     </main>
+    <div id="demo-popup" class="demo-popup" role="dialog" aria-modal="true" aria-labelledby="demo-popup-title" hidden>
+      <div class="demo-popup__panel">
+        <button id="demo-popup-close" class="demo-popup__close" type="button" aria-label="Close">×</button>
+        <div class="demo-popup__badge" aria-hidden="true">Demo complete</div>
+        <h3 id="demo-popup-title">Thanks for trying out AccessLayer!</h3>
+        <p>Follow me for more experiments, builds, and product notes.</p>
+        <a class="demo-popup__link" href="https://x.com/0xoptimus" target="_blank" rel="noreferrer">
+          Follow @0xoptimus
+        </a>
+      </div>
+    </div>
     <script src="/app.js" type="module"></script>
   </body>
 </html>
