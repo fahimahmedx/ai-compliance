@@ -13,7 +13,7 @@ export function getConfig(env = process.env) {
     worldEligibilityTtlMs: Number(mergedEnv.WORLD_ELIGIBILITY_TTL_MS || 24 * 60 * 60 * 1000),
     anthropicApiKey: mergedEnv.ANTHROPIC_API_KEY || "",
     anthropicModel: mergedEnv.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-    dataFile: mergedEnv.DATA_FILE || "data/store.json",
+    dataFile: mergedEnv.DATA_FILE || "data/app.sqlite",
   };
 }
 

@@ -272,6 +272,20 @@ textarea {
   gap: 20px;
 }
 
+.credit-balance {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 14px;
+  background: var(--white);
+  color: var(--soft-ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .chat-head h1 {
   margin-bottom: 0;
   font-size: clamp(2.7rem, 6vw, 5.4rem);

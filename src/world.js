@@ -6,17 +6,19 @@ export const WORLD_ACTION = "world-id-chat-access-v1";
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 
 export function createWorldVerificationRequest({ config, store, user }) {
-  const attempt = store.createWorldAttempt(user.id, {
-    id: crypto.randomUUID(),
-    action: WORLD_ACTION,
-    signal: `user:${user.id}`,
+  const attemptId = crypto.randomUUID();
+  const action = `${WORLD_ACTION}-${attemptId.slice(0, 8)}`;
+  const attempt = store.createWorldAttempt(user?.id || null, {
+    id: attemptId,
+    action,
+    signal: user?.id ? `user:${user.id}` : `attempt:${attemptId}`,
     expiresAt: new Date(Date.now() + ATTEMPT_TTL_MS).toISOString(),
   });
 
   const rpSignature = hasWorldConfig(config)
     ? signRequest({
       signingKeyHex: config.worldRpSigningKey,
-      action: WORLD_ACTION,
+      action,
       ttl: Math.floor(ATTEMPT_TTL_MS / 1000),
     })
     : mockRpSignature();
@@ -32,6 +34,7 @@ export function createWorldVerificationRequest({ config, store, user }) {
     appId: config.worldAppId || "app_staging_dev_mock",
     rpId: config.worldRpId || "rp_staging_dev_mock",
     action: attempt.action,
+    flow: "action",
     signal: attempt.signal,
     environment: config.worldEnvironment,
     allowLegacyProofs: true,
@@ -50,7 +53,7 @@ export function createWorldVerificationRequest({ config, store, user }) {
 
 export async function verifyWorldProof({ config, store, user, payload }) {
   const attempt = store.getWorldAttempt(payload?.attemptId);
-  if (!attempt || attempt.userId !== user.id) {
+  if (!attempt || (user && attempt.userId && attempt.userId !== user.id)) {
     return deny("missing_attempt", "World verification attempt was not found for this session.");
   }
   if (attempt.consumedAt) {
@@ -85,16 +88,13 @@ export async function verifyWorldProof({ config, store, user, payload }) {
   if (!nullifierHash) {
     return deny("missing_nullifier", "World proof did not include a nullifier.");
   }
-  if (store.hasWorldNullifier(nullifierHash)) {
-    return deny("reused_nullifier", "This World proof has already been used.");
-  }
-
   store.consumeWorldAttempt(attempt.id);
-  store.saveWorldNullifier(nullifierHash, user.id);
+  const verifiedUser = store.getOrCreateUserByWorldNullifier(nullifierHash);
   const expiresAt = new Date(Date.now() + config.worldEligibilityTtlMs).toISOString();
-  const verification = store.saveVerification(user.id, {
+  const verification = store.saveVerification(verifiedUser.id, {
     provider: "world",
     action: attempt.action,
+    worldAttemptId: attempt.id,
     eligibilityStatus: "eligible",
     reasonCode: "world_id_verified",
     reason: "World App verified a World ID.",
@@ -103,7 +103,7 @@ export async function verifyWorldProof({ config, store, user, payload }) {
     eligibilityExpiresAt: expiresAt,
   });
 
-  return { ok: true, verification };
+  return { ok: true, user: verifiedUser, verification };
 }
 
 export function getWorldEligibilityStatus(verification) {
@@ -149,6 +149,15 @@ async function callWorldVerifyApi(config, attempt, payload) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (isNullifierReplay(body) && getPayloadNullifier(payload)) {
+      return {
+        success: true,
+        has_world_id: hasWorldIdCredential(payload),
+        nullifier_hash: getPayloadNullifier(payload),
+        detail: body.detail || body.error,
+        replayed: true,
+      };
+    }
     return {
       success: false,
       detail: body.detail || body.error || `World verify failed with ${response.status}`,
@@ -161,8 +170,17 @@ function normalizeWorldVerifyResponse(body, payload) {
   return {
     success: body.success === true,
     has_world_id: hasWorldIdCredential(payload),
-    nullifier_hash: body.nullifier_hash || payload.nullifier_hash || payload.responses?.[0]?.nullifier,
+    nullifier_hash: body.nullifier_hash || getPayloadNullifier(payload),
     detail: body.detail || body.error,
+  };
+}
+
+function normalizeWorldSessionResponse(payload) {
+  return {
+    success: Boolean(payload.session_id),
+    has_world_id: hasWorldIdCredential(payload),
+    nullifier_hash: getSessionNullifier(payload),
+    detail: payload.error,
   };
 }
 
@@ -177,6 +195,20 @@ function mockWorldVerifyResponse(attempt) {
 function hasWorldIdCredential(payload) {
   const identifiers = new Set((payload.responses || []).map((response) => response.identifier));
   return identifiers.has("proof_of_human") || identifiers.has("orb") || identifiers.has("device");
+}
+
+function getPayloadNullifier(payload) {
+  return payload.nullifier_hash || payload.responses?.find((response) => response.nullifier)?.nullifier || null;
+}
+
+function getSessionNullifier(payload) {
+  const value = payload.responses?.find((response) => response.session_nullifier)?.session_nullifier;
+  return Array.isArray(value) ? value[0] : null;
+}
+
+function isNullifierReplay(body) {
+  const value = `${body?.code || ""} ${body?.detail || ""} ${body?.error || ""}`;
+  return value.includes("nullifier_replayed");
 }
 
 function hasExpectedSignalHash(payload, signal) {

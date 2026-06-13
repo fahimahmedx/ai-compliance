@@ -1,7 +1,5 @@
 import { IDKit, proofOfHuman } from "https://esm.sh/@worldcoin/idkit-core@4.1.8";
 
-const loginForm = document.querySelector("#login-form");
-const emailInput = document.querySelector("#email");
 const statusPill = document.querySelector("#status-pill");
 const statusCopy = document.querySelector("#status-copy");
 const startVerification = document.querySelector("#start-verification");
@@ -13,11 +11,13 @@ const chatView = document.querySelector("#chat-view");
 const promptInput = document.querySelector("#prompt");
 const sendPrompt = document.querySelector("#send-prompt");
 const response = document.querySelector("#response");
+const creditBalance = document.querySelector("#credit-balance");
 
 let currentUser = null;
 let currentStatus = "signed_out";
 let currentAttemptId = null;
 let pollTimer = null;
+let bridgePollTimer = null;
 let idkitAbortController = null;
 let mockCompleteTimer = null;
 
@@ -76,38 +76,19 @@ async function refresh() {
   const me = await api("/api/me");
   currentUser = me.user;
   if (currentUser) {
-    emailInput.value = currentUser.email;
-    const status = await api("/api/identity/status");
-    setStatus(status.status, status.reason);
+    setCredits(me.credits);
+    setStatus(me.identity.status, me.identity.reason);
+    if (me.identity.status === "eligible") await loadConversation();
   } else {
+    setCredits(me.credits);
     setStatus("signed_out");
   }
 }
 
-async function ensureSession() {
-  if (currentUser) return;
-  const email = emailInput.value || `human-${Date.now()}@world.local`;
-  await api("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email }),
-  });
-  await refresh();
-}
-
-loginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  clearConversation();
-  await api("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email: emailInput.value }),
-  });
-  await refresh();
-});
-
 startVerification.addEventListener("click", async () => {
   startVerification.disabled = true;
   startVerification.textContent = "Preparing...";
-  await ensureSession();
+  clearBridgePoll();
   const request = await api("/api/world/request", { method: "POST", body: "{}" });
   currentAttemptId = request.attemptId;
 
@@ -144,7 +125,7 @@ startVerification.addEventListener("click", async () => {
   qrCard.hidden = false;
   startVerification.textContent = "Refresh QR";
   startVerification.disabled = false;
-  startPolling();
+  statusCopy.textContent = "QR ready. Scan with World App, then approve the request on your phone.";
 });
 
 async function completeMockVerification() {
@@ -161,7 +142,7 @@ async function completeMockVerification() {
     }),
   });
   await refresh();
-  resetConversation();
+  await loadConversation();
   startVerification.textContent = "Verify with World";
   startVerification.disabled = false;
   if (mockCompleteTimer) {
@@ -195,6 +176,7 @@ async function sendChatMessage() {
       method: "POST",
       body: JSON.stringify({ prompt }),
     });
+    setCredits(result.credits);
     updateMessage(pending, result.text);
   } catch (error) {
     updateMessage(pending, error.message, true);
@@ -339,6 +321,24 @@ function resetConversation() {
   addMessage("assistant", "World ID verified. Ask the agent anything.");
 }
 
+async function loadConversation() {
+  const conversation = await api("/api/conversation");
+  setCredits(conversation.credits);
+  clearConversation();
+  if (!conversation.messages.length) {
+    resetConversation();
+    return;
+  }
+  for (const message of conversation.messages) {
+    addMessage(message.role, message.content);
+  }
+}
+
+function setCredits(credits = {}) {
+  const cents = Number(credits.displayCents || 0);
+  creditBalance.textContent = `${cents.toFixed(1)}¢ left`;
+}
+
 function showSystemMessage(text) {
   addMessage("assistant", text);
 }
@@ -372,31 +372,88 @@ async function createWorldConnectorUri(request, signal) {
     environment: request.environment,
   }).preset(proofOfHuman({ signal: request.signal }));
 
-  idkitRequest.pollUntilCompletion({
-    pollInterval: 2000,
-    timeout: 120000,
-    signal,
-  }).then(async (completion) => {
-    if (!completion.success) {
-      showSystemMessage(`World verification failed: ${completion.error}`);
-      await refresh();
+  statusCopy.textContent = "Waiting for World App scan...";
+  startBridgePolling(idkitRequest, request, signal);
+
+  return idkitRequest.connectorURI;
+}
+
+function startBridgePolling(idkitRequest, request, signal) {
+  const startedAt = Date.now();
+  clearBridgePoll();
+  bridgePollTimer = setInterval(async () => {
+    if (signal.aborted) {
+      clearBridgePoll();
+      return;
+    }
+    if (Date.now() - startedAt > 120000) {
+      clearBridgePoll();
+      statusCopy.textContent = "World verification timed out. Start a new scan.";
+      startVerification.textContent = "Try again";
+      startVerification.disabled = false;
       return;
     }
 
+    try {
+      const status = await idkitRequest.pollOnce();
+      statusCopy.textContent = bridgeStatusMessage(status.type);
+      if (status.type === "failed") {
+        clearBridgePoll();
+        const message = `World verification failed: ${status.error || "generic_error"}`;
+        statusCopy.textContent = message;
+        showSystemMessage(message);
+        startVerification.textContent = "Try again";
+        startVerification.disabled = false;
+        return;
+      }
+      if (status.type === "confirmed" && status.result) {
+        clearBridgePoll();
+        await submitWorldProof(request, status.result);
+      }
+    } catch (error) {
+      clearBridgePoll();
+      statusCopy.textContent = error.message;
+      showSystemMessage(error.message);
+      startVerification.textContent = "Try again";
+      startVerification.disabled = false;
+    }
+  }, 2000);
+}
+
+async function submitWorldProof(request, result) {
+  statusCopy.textContent = "World App approved. Verifying proof...";
+  try {
     await api("/api/world/verify", {
       method: "POST",
       body: JSON.stringify({
-        ...completion.result,
+        ...result,
         attemptId: request.attemptId,
         action: request.action,
         signal: request.signal,
       }),
     });
-    await refresh();
-    resetConversation();
-  }).catch((error) => {
-    if (error.name !== "AbortError") showSystemMessage(error.message);
-  });
+  } catch (error) {
+    statusCopy.textContent = error.message;
+    showSystemMessage(error.message);
+    startVerification.textContent = "Try again";
+    startVerification.disabled = false;
+    return;
+  }
+  await refresh();
+  await loadConversation();
+}
 
-  return idkitRequest.connectorURI;
+function bridgeStatusMessage(status) {
+  if (status === "waiting_for_connection") return "Waiting for World App to open the QR request...";
+  if (status === "awaiting_confirmation") return "World App opened the request. Waiting for approval...";
+  if (status === "confirmed") return "World App approved. Verifying proof...";
+  if (status === "failed") return "World verification failed.";
+  return `World status: ${status}`;
+}
+
+function clearBridgePoll() {
+  if (bridgePollTimer) {
+    clearInterval(bridgePollTimer);
+    bridgePollTimer = null;
+  }
 }

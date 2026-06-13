@@ -1,8 +1,10 @@
-export async function sendClaudeMessage(config, prompt) {
+export async function sendClaudeMessage(config, messages, { maxTokens = 1024 } = {}) {
   if (!config.anthropicApiKey) {
+    const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
     return {
       id: "mock_claude_response",
-      text: `Mock Claude response:\n\n${prompt}`,
+      text: `Mock Claude response:\n\n${lastUserMessage?.content || ""}`,
+      usage: { inputTokens: 0, outputTokens: 0 },
       mock: true,
     };
   }
@@ -16,8 +18,8 @@ export async function sendClaudeMessage(config, prompt) {
     },
     body: JSON.stringify({
       model: config.anthropicModel,
-      max_tokens: 1024,
-      messages: [{ role: "user", content: prompt }],
+      max_tokens: maxTokens,
+      messages,
     }),
   });
 
@@ -29,6 +31,7 @@ export async function sendClaudeMessage(config, prompt) {
   return {
     id: payload.id,
     text: extractText(payload),
+    usage: normalizeUsage(payload.usage),
     mock: false,
   };
 }
@@ -39,4 +42,11 @@ function extractText(payload) {
     .map((block) => block.text)
     .join("\n")
     .trim();
+}
+
+function normalizeUsage(usage = {}) {
+  return {
+    inputTokens: Number(usage.input_tokens || 0),
+    outputTokens: Number(usage.output_tokens || 0),
+  };
 }
