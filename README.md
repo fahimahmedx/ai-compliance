@@ -21,7 +21,7 @@ BASE_URL=http://localhost:3000
 WORLD_APP_ID=app_...
 WORLD_RP_ID=rp_...
 WORLD_RP_SIGNING_KEY=...
-WORLD_ENV=staging
+WORLD_ENV=production
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 DATA_FILE=data/app.sqlite
@@ -61,7 +61,7 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 
 Use Railway sealed variables for `WORLD_RP_SIGNING_KEY` and `ANTHROPIC_API_KEY`.
 
-In the World Developer Portal, enable World ID 4.0 for the app and configure the live app URL with the Railway domain. The app uses one stable World action, `world-id-chat-access-v1`, so a person gets the same nullifier for this app/action across verification attempts.
+In the World Developer Portal, enable World ID 4.0 for the app and configure the live app URL with the Railway domain. The app creates a unique World action for each verification attempt to avoid World replay failures, while storing users by the returned RP-scoped nullifier.
 
 After deploy, open `/api/config/status` on the Railway URL to confirm World and Anthropic are configured, then complete a real World App scan and send a test prompt.
 

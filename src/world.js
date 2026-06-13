@@ -7,7 +7,7 @@ const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 
 export function createWorldVerificationRequest({ config, store, user }) {
   const attemptId = crypto.randomUUID();
-  const action = WORLD_ACTION;
+  const action = `${WORLD_ACTION}-${attemptId.slice(0, 8)}`;
   const attempt = store.createWorldAttempt(user?.id || null, {
     id: attemptId,
     action,

@@ -16,7 +16,7 @@ test("World request uses basic proof-of-human without user presence", () => {
   assert.equal(request.allowLegacyProofs, true);
 });
 
-test("World request uses stable action across attempts", () => {
+test("World request uses unique action across attempts", () => {
   const store = makeStore();
   const first = createWorldVerificationRequest({
     config: { worldEnvironment: "staging" },
@@ -29,8 +29,9 @@ test("World request uses stable action across attempts", () => {
     user: null,
   });
 
-  assert.equal(first.action, "world-id-chat-access-v1");
-  assert.equal(second.action, "world-id-chat-access-v1");
+  assert.match(first.action, /^world-id-chat-access-v1-[0-9a-f]{8}$/);
+  assert.match(second.action, /^world-id-chat-access-v1-[0-9a-f]{8}$/);
+  assert.notEqual(first.action, second.action);
   assert.notEqual(first.attemptId, second.attemptId);
   assert.notEqual(first.signal, second.signal);
 });
