@@ -1,5 +1,8 @@
 export async function sendClaudeMessage(config, messages, { maxTokens = 1024 } = {}) {
   if (!config.anthropicApiKey) {
+    if (config.allowMockProviders === false || config.nodeEnv === "production") {
+      throw new Error("ANTHROPIC_API_KEY is not configured for production.");
+    }
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
     return {
       id: "mock_claude_response",

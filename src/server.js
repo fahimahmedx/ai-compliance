@@ -46,7 +46,9 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
           anthropic: {
             apiKeyConfigured: Boolean(config.anthropicApiKey),
             model: config.anthropicModel,
+            mockAllowed: config.allowMockProviders,
           },
+          nodeEnv: config.nodeEnv,
         });
       }
 
