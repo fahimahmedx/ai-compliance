@@ -328,7 +328,7 @@ textarea {
   background: var(--white);
   color: var(--soft-ink);
   line-height: 1.5;
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .message.user .message-body {
@@ -345,6 +345,72 @@ textarea {
   border-color: rgba(180, 35, 24, 0.25);
   background: #fde8e6;
   color: var(--bad);
+}
+
+.message-body > :first-child {
+  margin-top: 0;
+}
+
+.message-body > :last-child {
+  margin-bottom: 0;
+}
+
+.message-body p,
+.message-body ul,
+.message-body pre,
+.message-body blockquote {
+  margin: 0 0 0.85rem;
+}
+
+.message-body h1,
+.message-body h2,
+.message-body h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.message-body ul {
+  padding-left: 1.25rem;
+}
+
+.message-body li + li {
+  margin-top: 0.35rem;
+}
+
+.message-body code {
+  border-radius: 6px;
+  padding: 0.12rem 0.32rem;
+  background: rgba(5, 5, 5, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.message-body pre {
+  overflow-x: auto;
+  border-radius: 12px;
+  padding: 12px;
+  background: #111;
+  color: #f7f7f7;
+}
+
+.message-body pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.message-body blockquote {
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.message-body a {
+  color: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .composer {

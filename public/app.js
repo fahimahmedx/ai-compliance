@@ -51,7 +51,7 @@ function setStatus(status, reason) {
   statusPill.textContent = labels[status] || status;
   statusCopy.textContent = currentUser
     ? reason || statusMessage(status)
-    : "Verify with World to unlock the agent.";
+    : "Verify with World to access Claude.";
 
   startVerification.disabled = false;
   promptInput.disabled = status !== "eligible";
@@ -194,7 +194,7 @@ function addMessage(role, text, options = {}) {
   label.textContent = role === "user" ? "You" : "Agent";
   const body = document.createElement("div");
   body.className = "message-body";
-  body.textContent = text;
+  setMessageBody(body, role, text);
   message.append(label, body);
   response.append(message);
   response.scrollTop = response.scrollHeight;
@@ -205,8 +205,110 @@ function updateMessage(message, text, isError = false) {
   const body = message.querySelector(".message-body");
   message.classList.remove("pending");
   if (isError) message.classList.add("error");
-  body.textContent = text;
+  setMessageBody(body, message.classList.contains("user") ? "user" : "assistant", text);
   response.scrollTop = response.scrollHeight;
+}
+
+function setMessageBody(body, role, text) {
+  if (role === "assistant") {
+    body.innerHTML = renderMarkdown(text);
+    return;
+  }
+  body.textContent = text;
+}
+
+function renderMarkdown(markdown) {
+  const lines = escapeHtml(markdown).split(/\r?\n/);
+  const html = [];
+  let paragraph = [];
+  let listItems = [];
+  let inCodeBlock = false;
+  let codeLines = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    html.push(`<ul>${listItems.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      if (inCodeBlock) {
+        html.push(`<pre><code>${codeLines.join("\n")}</code></pre>`);
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        flushParagraph();
+        flushList();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      html.push(`<h${heading[1].length}>${renderInline(heading[2])}</h${heading[1].length}>`);
+      continue;
+    }
+
+    const listItem = trimmed.match(/^[-*]\s+(.+)$/);
+    if (listItem) {
+      flushParagraph();
+      listItems.push(listItem[1]);
+      continue;
+    }
+
+    const quote = trimmed.match(/^&gt;\s+(.+)$/);
+    if (quote) {
+      flushParagraph();
+      flushList();
+      html.push(`<blockquote>${renderInline(quote[1])}</blockquote>`);
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  if (inCodeBlock) html.push(`<pre><code>${codeLines.join("\n")}</code></pre>`);
+  return html.join("");
+}
+
+function renderInline(text) {
+  return text
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+}
+
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function clearConversation() {
