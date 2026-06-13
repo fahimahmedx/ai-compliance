@@ -47,6 +47,10 @@ export function createServer({ config = getConfig(), store = new SqliteStore(con
             apiKeyConfigured: Boolean(config.anthropicApiKey),
             model: config.anthropicModel,
             mockAllowed: config.allowMockProviders,
+            envKeyPresent: config.envKeys.includes("ANTHROPIC_API_KEY"),
+            similarEnvKeys: config.envKeys
+              .filter((key) => key.toUpperCase().includes("ANTHROPIC"))
+              .sort(),
           },
           nodeEnv: config.nodeEnv,
         });

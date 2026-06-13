@@ -6,6 +6,7 @@ export function getConfig(env = process.env) {
   return {
     port: Number(mergedEnv.PORT || 3000),
     nodeEnv,
+    envKeys: Object.keys(mergedEnv),
     baseUrl: stringValue(mergedEnv.BASE_URL) || `http://localhost:${mergedEnv.PORT || 3000}`,
     worldAppId: stringValue(mergedEnv.WORLD_APP_ID),
     worldRpId: stringValue(mergedEnv.WORLD_RP_ID),
