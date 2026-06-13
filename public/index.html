@@ -11,16 +11,16 @@
       <header class="topbar">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
-          <span>World Agent</span>
+          <span>AccessLayer</span>
         </div>
         <span id="status-pill" class="pill">Verify</span>
       </header>
 
       <section id="verify-view" class="stage verify-stage">
         <div class="hero-copy">
-          <p class="eyebrow">Proof of human</p>
-          <h1>Chat as a verified human.</h1>
-          <p id="status-copy" class="lede">Scan with World App to unlock the agent.</p>
+          <p class="eyebrow">Proof of US Citizenship</p>
+          <h1>Chat as a US Citizen 🇺🇸.</h1>
+          <p id="status-copy" class="lede">Scan with World App to access Claude.</p>
         </div>
 
         <div class="verify-panel">
@@ -34,7 +34,6 @@
           </div>
           <div class="actions">
             <button id="start-verification">Verify with World</button>
-            <button id="mock-verify" class="secondary" disabled>Mock verify</button>
           </div>
           <form id="login-form" class="hidden-form">
             <input id="email" type="email" autocomplete="email" value="human@world.local" aria-label="Email" required />
@@ -49,10 +48,14 @@
             <p class="eyebrow">Step 2</p>
             <h1>Start chatting.</h1>
           </div>
-          <span id="model-pill" class="pill ok">Claude gateway</span>
         </div>
         <div class="chat-surface">
-          <pre id="response" class="response" aria-live="polite">World ID verified. Ask the agent anything.</pre>
+          <div id="response" class="conversation" aria-live="polite">
+            <div class="message assistant">
+              <span class="message-label">Agent</span>
+              <div class="message-body">World ID verified. Ask the agent anything.</div>
+            </div>
+          </div>
           <div class="composer">
             <textarea id="prompt" rows="2" placeholder="Message the agent..." disabled></textarea>
             <button id="send-prompt" disabled>Send</button>

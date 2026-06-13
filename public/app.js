@@ -5,7 +5,6 @@ const emailInput = document.querySelector("#email");
 const statusPill = document.querySelector("#status-pill");
 const statusCopy = document.querySelector("#status-copy");
 const startVerification = document.querySelector("#start-verification");
-const mockVerify = document.querySelector("#mock-verify");
 const qrCard = document.querySelector("#qr-card");
 const qrCode = document.querySelector("#qr-code");
 const connectorLink = document.querySelector("#connector-link");
@@ -39,7 +38,7 @@ function setStatus(status, reason) {
   const labels = {
     signed_out: "Signed out",
     pending: "Pending",
-    eligible: "Eligible",
+    eligible: "Verified US Citizen 🇺🇸",
     ineligible: "Ineligible",
     expired: "Expired",
     failed: "Failed",
@@ -54,9 +53,7 @@ function setStatus(status, reason) {
     ? reason || statusMessage(status)
     : "Verify with World to unlock the agent.";
 
-  const signedIn = Boolean(currentUser);
   startVerification.disabled = false;
-  mockVerify.disabled = !signedIn || !currentAttemptId;
   promptInput.disabled = status !== "eligible";
   sendPrompt.disabled = status !== "eligible";
 
@@ -98,7 +95,7 @@ async function ensureSession() {
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  response.textContent = "";
+  clearConversation();
   await api("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email: emailInput.value }),
@@ -107,19 +104,21 @@ loginForm.addEventListener("submit", async (event) => {
 });
 
 startVerification.addEventListener("click", async () => {
-  response.textContent = "";
   startVerification.disabled = true;
   startVerification.textContent = "Preparing...";
   await ensureSession();
   const request = await api("/api/world/request", { method: "POST", body: "{}" });
   currentAttemptId = request.attemptId;
 
+  if (request.mock) {
+    await completeMockVerification();
+    return;
+  }
+
   if (idkitAbortController) idkitAbortController.abort();
   idkitAbortController = new AbortController();
 
-  const connectorUri = request.mock
-    ? `https://world.org/verify/mock?attempt=${encodeURIComponent(request.attemptId)}`
-    : await createWorldConnectorUri(request, idkitAbortController.signal);
+  const connectorUri = await createWorldConnectorUri(request, idkitAbortController.signal);
 
   const qr = await api("/api/qr", {
     method: "POST",
@@ -128,19 +127,14 @@ startVerification.addEventListener("click", async () => {
   qrCode.innerHTML = qr.svg;
   connectorLink.href = connectorUri;
   qrCard.hidden = false;
-  mockVerify.disabled = !request.mock;
-  response.textContent = request.mock
-    ? "World is not configured. Use mock completion for local development."
-    : "Scan the QR code with World App, then return here.";
   startVerification.textContent = "Refresh QR";
   startVerification.disabled = false;
   startPolling();
 });
 
-mockVerify.addEventListener("click", async () => {
-  response.textContent = "";
+async function completeMockVerification() {
   if (!currentAttemptId) {
-    response.textContent = "Start a World QR request first.";
+    addMessage("assistant", "Start a World QR request first.");
     return;
   }
   await api("/api/world/verify", {
@@ -152,23 +146,84 @@ mockVerify.addEventListener("click", async () => {
     }),
   });
   await refresh();
-});
+  resetConversation();
+  startVerification.textContent = "Verify with World";
+  startVerification.disabled = false;
+}
 
 sendPrompt.addEventListener("click", async () => {
-  response.textContent = "Sending...";
-  try {
-    const result = await api("/api/llm/messages", {
-      method: "POST",
-      body: JSON.stringify({ prompt: promptInput.value }),
-    });
-    response.textContent = result.text;
-  } catch (error) {
-    response.textContent = error.message;
+  await sendChatMessage();
+});
+
+promptInput.addEventListener("keydown", async (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    await sendChatMessage();
   }
 });
 
+async function sendChatMessage() {
+  const prompt = promptInput.value.trim();
+  if (!prompt || sendPrompt.disabled) return;
+
+  promptInput.value = "";
+  addMessage("user", prompt);
+  const pending = addMessage("assistant", "Thinking...", { pending: true });
+  sendPrompt.disabled = true;
+  promptInput.disabled = true;
+  try {
+    const result = await api("/api/llm/messages", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    });
+    updateMessage(pending, result.text);
+  } catch (error) {
+    updateMessage(pending, error.message, true);
+  } finally {
+    sendPrompt.disabled = currentStatus !== "eligible";
+    promptInput.disabled = currentStatus !== "eligible";
+    promptInput.focus();
+  }
+}
+
+function addMessage(role, text, options = {}) {
+  const message = document.createElement("div");
+  message.className = `message ${role}${options.pending ? " pending" : ""}`;
+  const label = document.createElement("span");
+  label.className = "message-label";
+  label.textContent = role === "user" ? "You" : "Agent";
+  const body = document.createElement("div");
+  body.className = "message-body";
+  body.textContent = text;
+  message.append(label, body);
+  response.append(message);
+  response.scrollTop = response.scrollHeight;
+  return message;
+}
+
+function updateMessage(message, text, isError = false) {
+  const body = message.querySelector(".message-body");
+  message.classList.remove("pending");
+  if (isError) message.classList.add("error");
+  body.textContent = text;
+  response.scrollTop = response.scrollHeight;
+}
+
+function clearConversation() {
+  response.replaceChildren();
+}
+
+function resetConversation() {
+  clearConversation();
+  addMessage("assistant", "World ID verified. Ask the agent anything.");
+}
+
+function showSystemMessage(text) {
+  addMessage("assistant", text);
+}
+
 refresh().catch((error) => {
-  response.textContent = error.message;
+  showSystemMessage(error.message);
   setStatus("signed_out");
 });
 
@@ -202,7 +257,7 @@ async function createWorldConnectorUri(request, signal) {
     signal,
   }).then(async (completion) => {
     if (!completion.success) {
-      response.textContent = `World verification failed: ${completion.error}`;
+      showSystemMessage(`World verification failed: ${completion.error}`);
       await refresh();
       return;
     }
@@ -217,9 +272,9 @@ async function createWorldConnectorUri(request, signal) {
       }),
     });
     await refresh();
-    response.textContent = "World ID verified. Ask the agent anything.";
+    resetConversation();
   }).catch((error) => {
-    if (error.name !== "AbortError") response.textContent = error.message;
+    if (error.name !== "AbortError") showSystemMessage(error.message);
   });
 
   return idkitRequest.connectorURI;

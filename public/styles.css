@@ -284,16 +284,67 @@ textarea {
   padding: 18px;
 }
 
-.response {
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin: 0;
   padding: 18px;
   overflow: auto;
   color: var(--soft-ink);
   background: transparent;
   border: 0;
+}
+
+.message {
+  display: grid;
+  gap: 6px;
+  max-width: min(76%, 760px);
+}
+
+.message.user {
+  align-self: end;
+}
+
+.message.assistant {
+  align-self: start;
+}
+
+.message-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.message.user .message-label {
+  text-align: right;
+}
+
+.message-body {
+  padding: 13px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--soft-ink);
+  line-height: 1.5;
   white-space: pre-wrap;
-  font: inherit;
-  line-height: 1.55;
+}
+
+.message.user .message-body {
+  border-color: var(--black);
+  background: var(--black);
+  color: var(--white);
+}
+
+.message.pending .message-body {
+  color: var(--muted);
+}
+
+.message.error .message-body {
+  border-color: rgba(180, 35, 24, 0.25);
+  background: #fde8e6;
+  color: var(--bad);
 }
 
 .composer {
