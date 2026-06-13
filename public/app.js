@@ -42,7 +42,7 @@ function setStatus(status, reason) {
     signed_out: "Signed out",
     pending: "Pending",
     eligible: "US passport verified",
-    ineligible: "Ineligible",
+    ineligible: "Unverified",
     expired: "Expired",
     failed: "Failed",
   };
