@@ -33,6 +33,38 @@ The server stores SQLite state in `data/app.sqlite` by default. It stores users 
 
 Prompt access is limited by persisted user-message count. The fifth user message is accepted, receives a response, and closes the conversation; later prompts are rejected.
 
+## Deploy to production without buying a domain
+
+Deploy the app as a Railway web service and use the generated `*.railway.app` HTTPS domain.
+
+1. Push this repo to GitHub.
+2. In Railway, create a new project from the GitHub repo.
+3. Configure the service:
+   - Build command: `npm ci`
+   - Start command: `npm start`
+   - Node version: `24`
+4. Generate a public Railway domain for the service.
+5. Add a Railway volume mounted at `/app/data`.
+6. Set these Railway variables:
+
+```sh
+NODE_ENV=production
+BASE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
+DATA_FILE=/app/data/app.sqlite
+WORLD_APP_ID=app_...
+WORLD_RP_ID=rp_...
+WORLD_RP_SIGNING_KEY=...
+WORLD_ENV=production
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+```
+
+Use Railway sealed variables for `WORLD_RP_SIGNING_KEY` and `ANTHROPIC_API_KEY`.
+
+In the World Developer Portal, enable World ID 4.0 for the app and configure the live app URL with the Railway domain. The app uses one stable World action, `world-id-chat-access-v1`, so a person gets the same nullifier for this app/action across verification attempts.
+
+After deploy, open `/api/config/status` on the Railway URL to confirm World and Anthropic are configured, then complete a real World App scan and send a test prompt.
+
 ## Test
 
 ```sh
